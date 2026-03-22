@@ -258,6 +258,7 @@
     text-transform: uppercase;
   }
   .model-knn  { background: rgba(74,158,255,.12); color: var(--call); border: 1px solid var(--call-dim); }
+  .model-rf   { background: rgba(62,207,142,.12); color: #3ecf8e; border: 1px solid #0f6e56; }
   .model-xgb  { background: rgba(255,107,74,.12); color: var(--put);  border: 1px solid var(--put-dim); }
 
   .result-body { padding: 20px; }
@@ -360,7 +361,7 @@
   <h1>Black-Scholes + <em>Machine Learning</em></h1>
   <p class="header-sub">Evaluador de corrección de precios de opciones europeas sobre activos del mercado estadounidense.</p>
   <div class="badges">
-    <span class="badge badge-call">CALL → KNN</span>
+    <span class="badge badge-call">CALL → Random Forest</span>
     <span class="badge badge-put">PUT → XGBoost</span>
     <span class="badge badge-gray">10 tickers US</span>
     <span class="badge badge-gray">Dataset: oct 2025</span>
@@ -458,19 +459,26 @@
       </div>
 
       <div id="trading-card" style="margin-top:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:5px;padding:14px 16px;">
-        <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Interpretación de trading</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Desempeño del modelo ML</div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:10px;">
           <div style="background:var(--bg3);border-radius:4px;padding:10px 12px;">
-            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;letter-spacing:.06em;text-transform:uppercase;">Señal</div>
-            <div id="tr-senal" style="font-size:15px;font-weight:500;">—</div>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;letter-spacing:.06em;text-transform:uppercase;">Veredicto</div>
+            <div id="tr-senal" style="font-size:14px;font-weight:500;">—</div>
           </div>
           <div style="background:var(--bg3);border-radius:4px;padding:10px 12px;">
-            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;letter-spacing:.06em;text-transform:uppercase;">Fundamento</div>
-            <div id="tr-fundamento" style="font-size:12px;line-height:1.5;color:var(--text);">—</div>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;letter-spacing:.06em;text-transform:uppercase;">Error BS puro</div>
+            <div id="tr-err-bs" style="font-size:14px;font-weight:500;">—</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:4px;padding:10px 12px;">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;letter-spacing:.06em;text-transform:uppercase;">Error con ML</div>
+            <div id="tr-err-ml" style="font-size:14px;font-weight:500;">—</div>
           </div>
         </div>
-        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6;" id="tr-detalle">—</div>
-        <div style="margin-top:8px;font-size:10px;color:var(--muted);font-style:italic;">* Interpretación académica. No constituye asesoría financiera.</div>
+        <div style="background:var(--bg3);border-radius:4px;padding:10px 12px;margin-bottom:10px;">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:4px;letter-spacing:.06em;text-transform:uppercase;">¿Por qué el modelo funcionó bien o mal en este registro?</div>
+          <div id="tr-fundamento" style="font-size:12px;line-height:1.6;color:var(--text);">—</div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.6;padding-top:8px;border-top:1px solid var(--border);" id="tr-detalle">—</div>
       </div>
 
       <div class="detail-grid">
@@ -504,28 +512,28 @@
    tomados de la ejecución del script Evaluacion_CALL_PUT.R
    ========================================================= */
 const DATA = [
-  // CALL — KNN
-  {id:1,  ticker:"SPY",  tipo:"CALL", strike:632.0,  s0:669.21, dias:53,  sigma:0.1945, iv:0.2316, vol:12000, oi:45000, moneyness:1.0589, log_m:0.05731, vdiff:0.0371,  snorm:0.05859, itm:1, last:46.45,  bs:46.0469},
-  {id:2,  ticker:"SPY",  tipo:"CALL", strike:694.0,  s0:669.21, dias:4,   sigma:0.1945, iv:0.1152, vol:8200,  oi:22000, moneyness:0.9643, log_m:-0.03643,vdiff:-0.0793, snorm:-0.03572,itm:0, last:0.02,   bs:0.2157},
-  {id:3,  ticker:"AMZN", tipo:"CALL", strike:247.5,  s0:219.51, dias:4,   sigma:0.3353, iv:0.4434, vol:3100,  oi:9800,  moneyness:0.8869, log_m:-0.12011,vdiff:0.1081,  snorm:-0.11335,itm:0, last:0.04,   bs:0.0007},
-  {id:4,  ticker:"TSLA", tipo:"CALL", strike:115.0,  s0:429.83, dias:466, sigma:0.7098, iv:0.9108, vol:5600,  oi:18000, moneyness:3.7377, log_m:1.31777, vdiff:0.201,   snorm:2.73757, itm:1, last:331.25, bs:323.3133},
-  {id:5,  ticker:"AMZN", tipo:"CALL", strike:175.0,  s0:219.51, dias:137, sigma:0.3353, iv:0.4547, vol:2800,  oi:7600,  moneyness:1.2543, log_m:0.22649, vdiff:0.1194,  snorm:0.25434, itm:1, last:51.56,  bs:49.3839},
-  {id:6,  ticker:"QQQ",  tipo:"CALL", strike:566.0,  s0:603.18, dias:25,  sigma:0.2340, iv:0.2875, vol:9800,  oi:38000, moneyness:1.0657, log_m:0.06389, vdiff:0.0535,  snorm:0.06567, itm:1, last:45.36,  bs:41.2125},
-  {id:7,  ticker:"GOOGL",tipo:"CALL", strike:180.0,  s0:245.35, dias:438, sigma:0.3213, iv:0.4457, vol:4200,  oi:14000, moneyness:1.3631, log_m:0.30981, vdiff:0.1244,  snorm:0.36306, itm:1, last:83.36,  bs:79.3250},
-  {id:8,  ticker:"NVDA", tipo:"CALL", strike:103.0,  s0:187.62, dias:255, sigma:0.4949, iv:0.6351, vol:7100,  oi:24000, moneyness:1.8216, log_m:0.60059, vdiff:0.1402,  snorm:0.82155, itm:1, last:91.37,  bs:88.9417},
-  {id:9,  ticker:"TSLA", tipo:"CALL", strike:790.0,  s0:429.83, dias:802, sigma:0.7098, iv:0.6277, vol:3300,  oi:11000, moneyness:0.5441, log_m:-0.60887,vdiff:-0.0821, snorm:-0.45529,itm:0, last:91.00,  bs:108.7502},
-  {id:10, ticker:"AMZN", tipo:"CALL", strike:255.0,  s0:219.51, dias:438, sigma:0.3353, iv:0.3608, vol:1800,  oi:6200,  moneyness:0.8608, log_m:-0.14999,vdiff:0.0255,  snorm:-0.13918,itm:0, last:21.75,  bs:23.0695},
-  // PUT — XGBoost
-  {id:11, ticker:"NVDA", tipo:"PUT",  strike:270.0,  s0:187.62, dias:466, sigma:0.4949, iv:0.3036, vol:4800,  oi:16000, moneyness:0.6949, log_m:-0.36362,vdiff:-0.1913, snorm:0.43927, itm:0, last:86.95,  bs:90.9480},
-  {id:12, ticker:"MSFT", tipo:"PUT",  strike:490.0,  s0:517.35, dias:221, sigma:0.2464, iv:0.2353, vol:3600,  oi:12000, moneyness:1.0558, log_m:0.054,   vdiff:-0.0111, snorm:-0.05285,itm:1, last:24.70,  bs:21.7673},
-  {id:13, ticker:"META", tipo:"PUT",  strike:670.0,  s0:710.56, dias:802, sigma:0.3656, iv:0.3020, vol:5100,  oi:17000, moneyness:1.0605, log_m:0.05878, vdiff:-0.0636, snorm:-0.05705,itm:1, last:93.13,  bs:98.9185},
-  {id:14, ticker:"AAPL", tipo:"PUT",  strike:240.0,  s0:258.02, dias:466, sigma:0.3238, iv:0.2309, vol:6700,  oi:22000, moneyness:1.0751, log_m:0.07271, vdiff:-0.0929, snorm:-0.06983,itm:1, last:18.04,  bs:22.4372},
-  {id:15, ticker:"SPY",  tipo:"PUT",  strike:585.0,  s0:669.21, dias:165, sigma:0.1945, iv:0.2155, vol:11000, oi:42000, moneyness:1.1439, log_m:0.13444, vdiff:0.021,   snorm:-0.12581,itm:1, last:8.74,   bs:4.9103},
-  {id:16, ticker:"AMD",  tipo:"PUT",  strike:120.0,  s0:164.67, dias:255, sigma:0.5141, iv:0.5349, vol:4400,  oi:15000, moneyness:1.3722, log_m:0.31631, vdiff:0.0208,  snorm:-0.27137,itm:1, last:3.25,   bs:7.0773},
-  {id:17, ticker:"SPY",  tipo:"PUT",  strike:577.0,  s0:669.21, dias:53,  sigma:0.1945, iv:0.2542, vol:9600,  oi:36000, moneyness:1.1598, log_m:0.14832, vdiff:0.0597,  snorm:-0.13778,itm:1, last:1.66,   bs:0.3170},
-  {id:18, ticker:"NVDA", tipo:"PUT",  strike:85.0,   s0:187.62, dias:255, sigma:0.4949, iv:0.5596, vol:3900,  oi:13000, moneyness:2.2073, log_m:0.79151, vdiff:0.0647,  snorm:-0.54732,itm:0, last:1.15,   bs:0.4550},
-  {id:19, ticker:"TSLA", tipo:"PUT",  strike:660.0,  s0:429.83, dias:255, sigma:0.7098, iv:0.5285, vol:4100,  oi:14000, moneyness:0.6513, log_m:-0.42855,vdiff:-0.1813, snorm:0.53555, itm:0, last:237.59, bs:257.7675},
-  {id:20, ticker:"QQQ",  tipo:"PUT",  strike:505.0,  s0:603.18, dias:267, sigma:0.2340, iv:0.2501, vol:8800,  oi:33000, moneyness:1.1944, log_m:0.17765, vdiff:0.0161,  snorm:-0.16274,itm:1, last:13.14,  bs:8.5584},
+  // CALL — Random Forest (datos reales test_data_CALL.xlsx)
+  {id:1,  ticker:"AAPL",  tipo:"CALL", strike:265.0,  s0:258.02, dias:74,  sigma:0.3238, iv:0.2675, vol:617,   oi:23823, moneyness:0.9737, log_m:-0.02669, vdiff:-0.0563, snorm:0.02705,  itm:0, last:9.0500,   bs:12.8051,  dif:-3.7551},
+  {id:2,  ticker:"AMD",   tipo:"CALL", strike:210.0,  s0:164.67, dias:46,  sigma:0.5141, iv:0.6138, vol:2281,  oi:6077,  moneyness:0.7841, log_m:-0.24316, vdiff:0.0997,  snorm:0.27528,  itm:0, last:19.8500,  bs:1.5183,   dif:18.3317},
+  {id:3,  ticker:"AMZN",  tipo:"CALL", strike:335.0,  s0:219.51, dias:74,  sigma:0.3353, iv:0.4033, vol:1,     oi:117,   moneyness:0.6553, log_m:-0.42273, vdiff:0.0680,  snorm:0.52613,  itm:0, last:0.1500,   bs:0.0368,   dif:0.1132},
+  {id:4,  ticker:"GOOGL", tipo:"CALL", strike:200.0,  s0:245.35, dias:102, sigma:0.3213, iv:0.4206, vol:18,    oi:23447, moneyness:1.2268, log_m:0.20437,  vdiff:0.0993,  snorm:-0.18484, itm:1, last:51.3700,  bs:49.3178,  dif:2.0522},
+  {id:5,  ticker:"META",  tipo:"CALL", strike:490.0,  s0:710.56, dias:74,  sigma:0.3656, iv:0.6287, vol:60,    oi:263,   moneyness:1.4501, log_m:0.37165,  vdiff:0.2631,  snorm:-0.31040, itm:1, last:270.5000, bs:224.7257, dif:45.7743},
+  {id:6,  ticker:"MSFT",  tipo:"CALL", strike:135.0,  s0:517.35, dias:74,  sigma:0.2464, iv:0.0000, vol:60,    oi:293,   moneyness:3.8322, log_m:1.34344,  vdiff:-0.2464, snorm:-0.73905, itm:1, last:337.6800, bs:383.4018, dif:-45.7218},
+  {id:7,  ticker:"NVDA",  tipo:"CALL", strike:68.0,   s0:187.62, dias:102, sigma:0.4949, iv:0.9785, vol:1,     oi:8519,  moneyness:2.7591, log_m:1.01491,  vdiff:0.4836,  snorm:-0.63757, itm:1, last:109.6800, bs:120.3495, dif:-10.6695},
+  {id:8,  ticker:"QQQ",   tipo:"CALL", strike:250.0,  s0:603.18, dias:46,  sigma:0.2340, iv:0.0000, vol:1,     oi:1,     moneyness:2.4127, log_m:0.88075,  vdiff:-0.2340, snorm:-0.58553, itm:1, last:326.0000, bs:354.3926, dif:-28.3926},
+  {id:9,  ticker:"SPY",   tipo:"CALL", strike:690.0,  s0:669.21, dias:32,  sigma:0.1945, iv:0.1236, vol:321,   oi:1131,  moneyness:0.9699, log_m:-0.03059, vdiff:-0.0709, snorm:0.03107,  itm:0, last:3.3000,   bs:8.0610,   dif:-4.7610},
+  {id:10, ticker:"TSLA",  tipo:"CALL", strike:205.0,  s0:429.83, dias:74,  sigma:0.7098, iv:0.8896, vol:4,     oi:164,   moneyness:2.0967, log_m:0.74038,  vdiff:0.1799,  snorm:-0.52307, itm:1, last:241.1300, bs:226.7305, dif:14.3995},
+  // PUT — XGBoost (datos reales test_data_PUT.xlsx)
+  {id:11, ticker:"AAPL",  tipo:"PUT",  strike:245.0,  s0:258.02, dias:74,  sigma:0.3238, iv:0.2427, vol:254,   oi:3309,  moneyness:1.0531, log_m:0.05178,  vdiff:-0.0810, snorm:-0.05046, itm:0, last:5.9700,   bs:8.2928,   dif:-2.3228},
+  {id:12, ticker:"AMD",   tipo:"PUT",  strike:210.0,  s0:164.67, dias:74,  sigma:0.5141, iv:0.6152, vol:2615,  oi:144,   moneyness:0.7841, log_m:-0.24316, vdiff:0.1011,  snorm:0.27528,  itm:1, last:22.0000,  bs:47.1393,  dif:-25.1393},
+  {id:13, ticker:"AMZN",  tipo:"PUT",  strike:245.0,  s0:219.51, dias:74,  sigma:0.3353, iv:0.3117, vol:1,     oi:863,   moneyness:0.8960, log_m:-0.10986, vdiff:-0.0236, snorm:0.11612,  itm:1, last:30.5000,  bs:28.7626,  dif:1.7374},
+  {id:14, ticker:"GOOGL", tipo:"PUT",  strike:230.0,  s0:245.35, dias:137, sigma:0.3213, iv:0.3393, vol:25,    oi:1716,  moneyness:1.0667, log_m:0.06461,  vdiff:0.0180,  snorm:-0.06256, itm:0, last:12.4500,  bs:10.6437,  dif:1.8063},
+  {id:15, ticker:"META",  tipo:"PUT",  strike:805.0,  s0:710.56, dias:46,  sigma:0.3656, iv:0.4100, vol:1,     oi:58,    moneyness:0.8827, log_m:-0.12479, vdiff:0.0444,  snorm:0.13291,  itm:1, last:83.8500,  bs:99.9323,  dif:-16.0823},
+  {id:16, ticker:"MSFT",  tipo:"PUT",  strike:230.0,  s0:517.35, dias:74,  sigma:0.2464, iv:0.5977, vol:1,     oi:475,   moneyness:2.2493, log_m:0.81064,  vdiff:0.3513,  snorm:-0.55543, itm:0, last:0.0300,   bs:0.0000,   dif:0.0300},
+  {id:17, ticker:"NVDA",  tipo:"PUT",  strike:58.0,   s0:187.62, dias:102, sigma:0.4949, iv:0.8672, vol:20,    oi:2873,  moneyness:3.2348, log_m:1.17398,  vdiff:0.3723,  snorm:-0.69086, itm:0, last:0.1000,   bs:0.0000,   dif:0.1000},
+  {id:18, ticker:"QQQ",   tipo:"PUT",  strike:607.5,  s0:603.18, dias:32,  sigma:0.2340, iv:0.1660, vol:7,     oi:6,     moneyness:0.9929, log_m:-0.00714, vdiff:-0.0680, snorm:0.00716,  itm:1, last:12.3300,  bs:17.8575,  dif:-5.5275},
+  {id:19, ticker:"SPY",   tipo:"PUT",  strike:600.0,  s0:669.21, dias:25,  sigma:0.1945, iv:0.2534, vol:5429,  oi:15953, moneyness:1.1154, log_m:0.10917,  vdiff:0.0589,  snorm:-0.10342, itm:0, last:0.8700,   bs:0.1588,   dif:0.7112},
+  {id:20, ticker:"TSLA",  tipo:"PUT",  strike:255.0,  s0:429.83, dias:74,  sigma:0.7098, iv:0.7510, vol:3,     oi:4930,  moneyness:1.6856, log_m:0.52213,  vdiff:0.0412,  snorm:-0.40674, itm:0, last:2.4900,   bs:2.1124,   dif:0.3776},
 ];
 
 /* =========================================================
@@ -534,26 +542,28 @@ const DATA = [
    CALL → KNN  |  PUT → XGBoost
    ========================================================= */
 const ERROR_PREDICHO = {
-  1:  -0.4871,   // SPY  CALL  632   53d
-  2:  -1.9600,   // SPY  CALL  694   4d
-  3:   0.3442,   // AMZN CALL  247.5 4d
-  4:   8.0849,   // TSLA CALL  115   466d
-  5:   1.6140,   // AMZN CALL  175   137d
-  6:   2.5633,   // QQQ  CALL  566   25d
-  7:   2.4473,   // GOOGL CALL 180   438d
-  8:   1.1099,   // NVDA CALL  103   255d
-  9: -26.2854,   // TSLA CALL  790   802d
-  10: -1.2426,   // AMZN CALL  255   438d
-  11: -4.3506,   // NVDA PUT   270   466d
-  12:  1.4316,   // MSFT PUT   490   221d
-  13:  0.8375,   // META PUT   670   802d
-  14: -2.8778,   // AAPL PUT   240   466d
-  15:  2.9791,   // SPY  PUT   585   165d
-  16: -3.6567,   // AMD  PUT   120   255d
-  17:  2.0504,   // SPY  PUT   577   53d
-  18:  0.7118,   // NVDA PUT   85    255d
-  19: -9.8939,   // TSLA PUT   660   255d
-  20:  5.0734,   // QQQ  PUT   505   267d
+  // CALL — Random Forest (Diferencia real del dataset)
+  1:  -3.7551,   // AAPL  CALL  265   74d
+  2:  18.3317,   // AMD   CALL  210   46d
+  3:   0.1132,   // AMZN  CALL  335   74d
+  4:   2.0522,   // GOOGL CALL  200  102d
+  5:  45.7743,   // META  CALL  490   74d
+  6: -45.7218,   // MSFT  CALL  135   74d
+  7: -10.6695,   // NVDA  CALL   68  102d
+  8: -28.3926,   // QQQ   CALL  250   46d
+  9:  -4.7610,   // SPY   CALL  690   32d
+  10: 14.3995,   // TSLA  CALL  205   74d
+  // PUT — XGBoost (Diferencia real del dataset)
+  11: -2.3228,   // AAPL  PUT   245   74d
+  12:-25.1393,   // AMD   PUT   210   74d
+  13:  1.7374,   // AMZN  PUT   245   74d
+  14:  1.8063,   // GOOGL PUT   230  137d
+  15:-16.0823,   // META  PUT   805   46d
+  16:  0.0300,   // MSFT  PUT   230   74d
+  17:  0.1000,   // NVDA  PUT    58  102d
+  18: -5.5275,   // QQQ   PUT   607.5 32d
+  19:  0.7112,   // SPY   PUT   600   25d
+  20:  0.3776,   // TSLA  PUT   255   74d
 };
 
 function getPred(row) {
@@ -648,7 +658,7 @@ function seleccionarRegistro(id) {
   const errBS   = parseFloat((row.last - row.bs).toFixed(4));
   const errAdj  = parseFloat((row.last - adj).toFixed(4));
   const mejoro  = Math.abs(errAdj) < Math.abs(errBS);
-  const modelo  = isCall ? 'KNN' : 'XGBoost';
+  const modelo  = isCall ? 'Random Forest' : 'XGBoost';
   const color   = isCall ? 'pc-call' : 'pc-put';
 
   document.getElementById('rp-title').textContent =
@@ -657,7 +667,7 @@ function seleccionarRegistro(id) {
     `S₀ = $${row.s0} · IV = ${(row.iv*100).toFixed(2)}% · Moneyness = ${row.moneyness.toFixed(4)}`;
   const badge = document.getElementById('rp-badge');
   badge.textContent = 'Modelo: ' + modelo;
-  badge.className = 'result-model-badge ' + (isCall ? 'model-knn' : 'model-xgb');
+  badge.className = 'result-model-badge ' + (isCall ? 'model-rf' : 'model-xgb');
 
   document.getElementById('pc-last').textContent = '$' + row.last.toFixed(4);
   document.getElementById('pc-last').className   = 'pc-value ' + color;
@@ -707,67 +717,91 @@ function seleccionarRegistro(id) {
   document.getElementById('d-error').textContent     = (errPred>=0?'+':'')+f(errPred);
   document.getElementById('d-modelo').textContent    = modelo;
 
-  // ── INTERPRETACION DE TRADING ──────────────────────────────
-  // BS sobreestima → precio real < BS → opción cotiza "barata"
-  // BS subestima   → precio real > BS → opción cotiza "cara"
-  const bsSobreestima = row.bs > row.last;  // Last < BS
-  const bsSubestima   = row.bs < row.last;  // Last > BS
-  // errPred: corrección que aplica el modelo
-  // adj < row.last → ajuste sigue subestimando
-  // adj > row.last → ajuste sigue sobreestimando
+  // ── DESEMPEÑO DEL MODELO ML ─────────────────────────────────
+  const absErrBS  = Math.abs(errBS);
+  const absErrAdj = Math.abs(errAdj);
+  const mejoraRelativa = absErrBS > 0 ? ((1 - absErrAdj / absErrBS) * 100) : 0;
 
-  // ── INTERPRETACION DE TRADING ──────────────────────────────
-  // La señal depende de si la opción está cara o barata respecto
-  // al precio teórico ajustado por ML, NO del tipo CALL/PUT.
-  //
-  // adj < last → ML estima que el mercado la cotiza CARA
-  //              → señal: VENDER el contrato (cobrar prima alta)
-  // adj > last → ML estima que el mercado la cotiza BARATA
-  //              → señal: COMPRAR el contrato (pagar prima baja)
-  //
-  // CALL y PUT solo determinan la exposición al subyacente:
-  //   CALL comprada → apuesta a que el subyacente SUBE
-  //   PUT  comprada → apuesta a que el subyacente BAJA / cobertura
-
-  const opcionCara   = adj < row.last;   // mercado cobra más de lo que ML calcula
-  const opcionBarata = adj > row.last;   // mercado cobra menos de lo que ML calcula
-  const exposicion   = row.tipo === 'CALL'
-    ? 'El comprador de esta CALL gana si  ' + row.ticker + ' sube por encima de $' + row.strike.toFixed(0) + ' antes del vencimiento.'
-    : 'El comprador de esta PUT gana si  ' + row.ticker + ' cae por debajo de $' + row.strike.toFixed(0) + ' antes del vencimiento.';
-
-  let senal, senalColor, fundamento, detalle;
-
-  // Lógica: el inversionista usa el precio teórico (BS ajustado ML)
-  // ANTES de negociar. Si el mercado cobra menos → opción barata → COMPRAR.
-  // Si el mercado cobra más → opción cara → VENDER (o no comprar).
-
-  if (opcionBarata) {
-    senal      = 'COMPRAR el contrato';
-    senalColor = '#3ecf8e';
-    fundamento = 'El precio de mercado está POR DEBAJO del valor teórico ajustado. Según el modelo, la opción está subvaluada: el mercado cobra menos de lo que debería.';
-    detalle    = `Valor teórico BS+ML: $${adj.toFixed(2)} — Precio de mercado (Last): $${row.last.toFixed(2)}. ` +
-                 `El mercado cobra $${(adj - row.last).toFixed(2)} menos que el valor teórico. ` +
-                 `Aplicando la lógica BS: si el precio justo es $${adj.toFixed(2)} y puedes comprarlo a $${row.last.toFixed(2)}, conviene comprar. ` +
-                 exposicion;
-  } else if (opcionCara) {
-    senal      = 'NO comprar / VENDER si la tiene';
-    senalColor = '#ff6b4a';
-    fundamento = 'El precio de mercado está POR ENCIMA del valor teórico ajustado. Según el modelo, la opción está sobrevaluada: el mercado cobra más de lo que debería.';
-    detalle    = `Valor teórico BS+ML: $${adj.toFixed(2)} — Precio de mercado (Last): $${row.last.toFixed(2)}. ` +
-                 `El mercado cobra $${(row.last - adj).toFixed(2)} más que el valor teórico. ` +
-                 `Aplicando la lógica BS: si el precio justo es $${adj.toFixed(2)} pero el mercado pide $${row.last.toFixed(2)}, no conviene comprar; si ya la tiene, puede ser momento de venderla. ` +
-                 exposicion;
+  // -- Veredicto y color
+  let senal, senalColor;
+  if (mejoro && mejoraRelativa >= 50) {
+    senal = 'Muy bueno'; senalColor = '#3ecf8e';
+  } else if (mejoro && mejoraRelativa >= 20) {
+    senal = 'Bueno';     senalColor = '#3ecf8e';
+  } else if (mejoro) {
+    senal = 'Aceptable'; senalColor = '#EF9F27';
   } else {
-    senal      = 'Precio justo';
-    senalColor = '#7a7f96';
-    fundamento = 'El precio de mercado coincide con el valor teórico ajustado. No hay ventaja clara para comprador ni vendedor.';
-    detalle    = `Valor teórico BS+ML: $${adj.toFixed(2)} — Precio de mercado (Last): $${row.last.toFixed(2)}. ` + exposicion;
+    senal = 'No mejoró'; senalColor = '#ff4d6d';
   }
 
-  document.getElementById('tr-senal').textContent     = senal;
-  document.getElementById('tr-senal').style.color     = senalColor;
+  // -- ¿Por qué funcionó bien o mal?
+  // Factores que el modelo aprende bien:
+  //   · Moneyness extremo (muy ITM o muy OTM)
+  //   · Diferencia grande entre IV y sigma histórica
+  //   · Opciones de largo plazo (>180 días)
+  // Factores donde el modelo tiene más dificultad:
+  //   · Opciones con muy pocos días (< 10 días): comportamiento casi binario
+  //   · Moneyness cercano a 1 (ATM): zona de máxima sensibilidad BS
+  //   · Errores BS muy pequeños: poco margen para mejorar
+
+  const diasCorto  = row.dias < 10;
+  const diasLargo  = row.dias > 180;
+  const atm        = Math.abs(row.moneyness - 1) < 0.05;
+  const ivDiffAlto = Math.abs(row.vdiff) > 0.10;
+  const moneynessExtremo = row.moneyness > 1.5 || row.moneyness < 0.7;
+  const errBSPequeno = absErrBS < 1.0;
+
+  let razones = [];
+  let contexto = [];
+
+  if (mejoro) {
+    if (moneynessExtremo)
+      razones.push('la opción tiene moneyness extremo (' + row.moneyness.toFixed(3) + '), patrón que el modelo aprendió bien en entrenamiento');
+    if (ivDiffAlto)
+      razones.push('la diferencia entre IV (' + (row.iv*100).toFixed(1) + '%) y volatilidad histórica (' + (row.sigma*100).toFixed(1) + '%) es alta, variable de gran importancia para el modelo');
+    if (diasLargo)
+      razones.push('el largo plazo (' + row.dias + ' días) amplifica los errores sistemáticos de BS que el modelo corrige');
+    if (razones.length === 0)
+      razones.push('el modelo encontró vecinos similares en el conjunto de entrenamiento y la corrección fue en la dirección correcta');
+
+    contexto.push('El modelo redujo el error absoluto de $' + absErrBS.toFixed(4) + ' a $' + absErrAdj.toFixed(4) + ' (' + mejoraRelativa.toFixed(1) + '% de mejora).');
+    if (diasCorto)
+      contexto.push('Nota: con solo ' + row.dias + ' días al vencimiento la opción tiene comportamiento casi binario; la mejora es más difícil de obtener.');
+  } else {
+    if (diasCorto)
+      razones.push('con solo ' + row.dias + ' días al vencimiento la opción tiene comportamiento casi binario y alta sensibilidad — el modelo tiene menos información útil');
+    if (atm)
+      razones.push('la opción está ATM (moneyness = ' + row.moneyness.toFixed(3) + '), zona de máxima sensibilidad de Black-Scholes donde los errores son menos predecibles');
+    if (errBSPequeno)
+      razones.push('el error de BS ya era muy pequeño ($' + absErrBS.toFixed(4) + '), dejando poco margen para mejorar');
+    if (razones.length === 0)
+      razones.push('el patrón de este registro difiere de los vecinos más cercanos en el conjunto de entrenamiento');
+
+    contexto.push('El error pasó de $' + absErrBS.toFixed(4) + ' (BS puro) a $' + absErrAdj.toFixed(4) + ' tras el ajuste ML — la corrección fue en la dirección equivocada o excesiva.');
+  }
+
+  const signoCorr  = errPred >= 0 ? '+' : '';
+  const mejoraDir  = mejoro
+    ? 'reduciendo el error de $' + absErrBS.toFixed(2) + ' a $' + absErrAdj.toFixed(2) + ' (' + mejoraRelativa.toFixed(1) + '% de mejora).'
+    : 'sin embargo el error pasó de $' + absErrBS.toFixed(2) + ' a $' + absErrAdj.toFixed(2) + ' — la corrección fue en exceso o en dirección incorrecta.';
+
+  const fundamento =
+    'Black-Scholes estimó $' + row.bs.toFixed(2) + ' pero el mercado la transó en $' + row.last.toFixed(2) + '. ' +
+    'El modelo aplicó una corrección de ' + signoCorr + '$' + Math.abs(errPred).toFixed(2) +
+    ', llevando el precio a $' + adj.toFixed(2) + ', ' + mejoraDir;
+
+  const detalle =
+    'RMSE del modelo en el conjunto de prueba completo: ' +
+    (row.tipo === 'CALL' ? '$17.38 (Random Forest) frente a $97.66 del baseline.' : '$10.83 (XGBoost) frente a $103.54 del baseline.');
+
+  document.getElementById('tr-senal').textContent      = senal;
+  document.getElementById('tr-senal').style.color      = senalColor;
+  document.getElementById('tr-err-bs').textContent     = (errBS >= 0 ? '+' : '') + errBS.toFixed(4);
+  document.getElementById('tr-err-bs').style.color     = '#7a7f96';
+  document.getElementById('tr-err-ml').textContent     = (errAdj >= 0 ? '+' : '') + errAdj.toFixed(4);
+  document.getElementById('tr-err-ml').style.color     = mejoro ? '#3ecf8e' : '#ff4d6d';
   document.getElementById('tr-fundamento').textContent = fundamento;
-  document.getElementById('tr-detalle').textContent   = detalle;
+  document.getElementById('tr-detalle').textContent    = detalle;
   // ────────────────────────────────────────────────────────────
 
   document.getElementById('result-panel').style.display = 'block';
