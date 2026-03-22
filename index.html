@@ -457,6 +457,22 @@
         <span id="banner-text">—</span>
       </div>
 
+      <div id="trading-card" style="margin-top:12px;background:var(--bg2);border:1px solid var(--border2);border-radius:5px;padding:14px 16px;">
+        <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Interpretación de trading</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div style="background:var(--bg3);border-radius:4px;padding:10px 12px;">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;letter-spacing:.06em;text-transform:uppercase;">Señal</div>
+            <div id="tr-senal" style="font-size:15px;font-weight:500;">—</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:4px;padding:10px 12px;">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px;letter-spacing:.06em;text-transform:uppercase;">Fundamento</div>
+            <div id="tr-fundamento" style="font-size:12px;line-height:1.5;color:var(--text);">—</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6;" id="tr-detalle">—</div>
+        <div style="margin-top:8px;font-size:10px;color:var(--muted);font-style:italic;">* Interpretación académica. No constituye asesoría financiera.</div>
+      </div>
+
       <div class="detail-grid">
         <div class="detail-item"><div class="di-k">Ticker</div><div class="di-v" id="d-ticker">—</div></div>
         <div class="detail-item"><div class="di-k">Tipo</div><div class="di-v" id="d-tipo">—</div></div>
@@ -513,104 +529,35 @@ const DATA = [
 ];
 
 /* =========================================================
-   PARAMETROS DE NORMALIZACION KNN (de normalizacion_params_CALL.rds)
-   medias y SD calculados sobre train_data_CALL
+   ERROR_PREDICHO — valores exactos del output de R
+   (columna Error_predicho de Evaluacion_CALL_PUT.R)
+   CALL → KNN  |  PUT → XGBoost
    ========================================================= */
-const KNN_MEANS = {
-  Strike:1079.93, Precio_Actual:358.10, Dias_Vencimiento:206.84,
-  Volatilidad_Historica:0.3924, Vol:8234, OI:28945,
-  IV:0.4823, Moneyness:1.1832, Log_Moneyness:0.0812,
-  Vol_Diff:0.0899, Strike_Normalizado:0.1156, In_The_Money:0.6421
+const ERROR_PREDICHO = {
+  1:  -0.4871,   // SPY  CALL  632   53d
+  2:  -1.9600,   // SPY  CALL  694   4d
+  3:   0.3442,   // AMZN CALL  247.5 4d
+  4:   8.0849,   // TSLA CALL  115   466d
+  5:   1.6140,   // AMZN CALL  175   137d
+  6:   2.5633,   // QQQ  CALL  566   25d
+  7:   2.4473,   // GOOGL CALL 180   438d
+  8:   1.1099,   // NVDA CALL  103   255d
+  9: -26.2854,   // TSLA CALL  790   802d
+  10: -1.2426,   // AMZN CALL  255   438d
+  11: -4.3506,   // NVDA PUT   270   466d
+  12:  1.4316,   // MSFT PUT   490   221d
+  13:  0.8375,   // META PUT   670   802d
+  14: -2.8778,   // AAPL PUT   240   466d
+  15:  2.9791,   // SPY  PUT   585   165d
+  16: -3.6567,   // AMD  PUT   120   255d
+  17:  2.0504,   // SPY  PUT   577   53d
+  18:  0.7118,   // NVDA PUT   85    255d
+  19: -9.8939,   // TSLA PUT   660   255d
+  20:  5.0734,   // QQQ  PUT   505   267d
 };
-const KNN_SDS = {
-  Strike:641.28, Precio_Actual:218.45, Dias_Vencimiento:218.62,
-  Volatilidad_Historica:0.1782, Vol:9821, OI:34112,
-  IV:0.2156, Moneyness:0.4938, Log_Moneyness:0.3612,
-  Vol_Diff:0.1934, Strike_Normalizado:0.4721, In_The_Money:0.4793
-};
 
-/* Parámetros XGBoost PUT: betas aproximados del modelo entrenado */
-const TICKERS = ["AAPL","AMD","AMZN","GOOGL","META","MSFT","NVDA","QQQ","SPY","TSLA"];
-
-/* =========================================================
-   BLACK-SCHOLES
-   ========================================================= */
-function normCDF(x) {
-  const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
-  const sign = x < 0 ? -1 : 1;
-  const t = 1/(1+p*Math.abs(x));
-  const y = 1-(((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-x*x/2);
-  return 0.5*(1+sign*y);
-}
-function blackScholes(S,K,T,r,sigma,tipo) {
-  if (T<=0) return Math.max(tipo==='call'?S-K:K-S, 0);
-  const d1 = (Math.log(S/K)+(r+sigma*sigma/2)*T)/(sigma*Math.sqrt(T));
-  const d2 = d1-sigma*Math.sqrt(T);
-  return tipo==='call'
-    ? S*normCDF(d1)-K*Math.exp(-r*T)*normCDF(d2)
-    : K*Math.exp(-r*T)*normCDF(-d2)-S*normCDF(-d1);
-}
-
-/* =========================================================
-   PREDICCION KNN — aplica Z-score y busca vecinos aproximados
-   (simulamos la predicción con parámetros estadísticos del modelo)
-   ========================================================= */
-function predKNN(row) {
-  const z = (v, k) => (v - KNN_MEANS[k]) / KNN_SDS[k];
-  const zS   = z(row.strike,   'Strike');
-  const zS0  = z(row.s0,       'Precio_Actual');
-  const zT   = z(row.dias,     'Dias_Vencimiento');
-  const zSig = z(row.sigma,    'Volatilidad_Historica');
-  const zIV  = z(row.iv,       'IV');
-  const zM   = z(row.moneyness,'Moneyness');
-  const zLM  = z(row.log_m,    'Log_Moneyness');
-  const zVD  = z(row.vdiff,    'Vol_Diff');
-  const zSN  = z(row.snorm,    'Strike_Normalizado');
-  const zITM = z(row.itm,      'In_The_Money');
-
-  let pred = 0;
-  pred += zIV  * 18.4;
-  pred += zM   * 22.1;
-  pred += zLM  * 15.6;
-  pred += zSN  * (-12.3);
-  pred += zVD  * 8.7;
-  pred += zT   * (-3.2);
-  pred += zITM * 4.1;
-  pred += zS0  * 3.8;
-  pred += zSig * (-2.6);
-
-  const tickerBias = {AAPL:0,MSFT:2.1,NVDA:5.8,TSLA:3.4,META:4.2,AMZN:-1.8,GOOGL:-0.4,AMD:1.9,SPY:-2.1,QQQ:-1.6};
-  pred += (tickerBias[row.ticker] || 0);
-
-  const scale = Math.abs(row.last) > 50 ? 1.12 : 0.95;
-  return parseFloat((pred * scale).toFixed(4));
-}
-
-/* =========================================================
-   PREDICCION XGBoost PUT
-   ========================================================= */
-function predXGB(row) {
-  const m   = row.moneyness;
-  const lm  = row.log_m;
-  const iv  = row.iv;
-  const sig = row.sigma;
-  const vd  = row.vdiff;
-  const sn  = row.snorm;
-  const T   = row.dias / 365;
-
-  let pred = 0;
-  pred += (m - 1.0) * (-148);
-  pred += lm * (-20);
-  pred += sn * (-50);
-  pred += vd * (-25);
-  pred += (iv - 0.45) * 38;
-  pred += row.itm * 12;
-  pred += (T - 0.5) * 5;
-
-  const tickerBias = {AAPL:0,MSFT:0.9,NVDA:-25.2,TSLA:-5.0,META:-2.7,AMZN:6.3,GOOGL:-1.0,AMD:-2.4,SPY:2.0,QQQ:2.2};
-  pred += (tickerBias[row.ticker] || 0);
-
-  return parseFloat(pred.toFixed(4));
+function getPred(row) {
+  return ERROR_PREDICHO[row.id];
 }
 
 /* =========================================================
@@ -696,7 +643,7 @@ function seleccionarRegistro(id) {
 
   const row = DATA.find(r => r.id === id);
   const isCall = row.tipo === 'CALL';
-  const errPred = isCall ? predKNN(row) : predXGB(row);
+  const errPred = getPred(row);
   const adj     = parseFloat((row.bs + errPred).toFixed(4));
   const errBS   = parseFloat((row.last - row.bs).toFixed(4));
   const errAdj  = parseFloat((row.last - adj).toFixed(4));
@@ -759,6 +706,69 @@ function seleccionarRegistro(id) {
   document.getElementById('d-itm').textContent       = row.itm ? 'Sí (ITM)' : 'No (OTM)';
   document.getElementById('d-error').textContent     = (errPred>=0?'+':'')+f(errPred);
   document.getElementById('d-modelo').textContent    = modelo;
+
+  // ── INTERPRETACION DE TRADING ──────────────────────────────
+  // BS sobreestima → precio real < BS → opción cotiza "barata"
+  // BS subestima   → precio real > BS → opción cotiza "cara"
+  const bsSobreestima = row.bs > row.last;  // Last < BS
+  const bsSubestima   = row.bs < row.last;  // Last > BS
+  // errPred: corrección que aplica el modelo
+  // adj < row.last → ajuste sigue subestimando
+  // adj > row.last → ajuste sigue sobreestimando
+
+  // ── INTERPRETACION DE TRADING ──────────────────────────────
+  // La señal depende de si la opción está cara o barata respecto
+  // al precio teórico ajustado por ML, NO del tipo CALL/PUT.
+  //
+  // adj < last → ML estima que el mercado la cotiza CARA
+  //              → señal: VENDER el contrato (cobrar prima alta)
+  // adj > last → ML estima que el mercado la cotiza BARATA
+  //              → señal: COMPRAR el contrato (pagar prima baja)
+  //
+  // CALL y PUT solo determinan la exposición al subyacente:
+  //   CALL comprada → apuesta a que el subyacente SUBE
+  //   PUT  comprada → apuesta a que el subyacente BAJA / cobertura
+
+  const opcionCara   = adj < row.last;   // mercado cobra más de lo que ML calcula
+  const opcionBarata = adj > row.last;   // mercado cobra menos de lo que ML calcula
+  const exposicion   = row.tipo === 'CALL'
+    ? 'El comprador de esta CALL gana si  ' + row.ticker + ' sube por encima de $' + row.strike.toFixed(0) + ' antes del vencimiento.'
+    : 'El comprador de esta PUT gana si  ' + row.ticker + ' cae por debajo de $' + row.strike.toFixed(0) + ' antes del vencimiento.';
+
+  let senal, senalColor, fundamento, detalle;
+
+  // Lógica: el inversionista usa el precio teórico (BS ajustado ML)
+  // ANTES de negociar. Si el mercado cobra menos → opción barata → COMPRAR.
+  // Si el mercado cobra más → opción cara → VENDER (o no comprar).
+
+  if (opcionBarata) {
+    senal      = 'COMPRAR el contrato';
+    senalColor = '#3ecf8e';
+    fundamento = 'El precio de mercado está POR DEBAJO del valor teórico ajustado. Según el modelo, la opción está subvaluada: el mercado cobra menos de lo que debería.';
+    detalle    = `Valor teórico BS+ML: $${adj.toFixed(2)} — Precio de mercado (Last): $${row.last.toFixed(2)}. ` +
+                 `El mercado cobra $${(adj - row.last).toFixed(2)} menos que el valor teórico. ` +
+                 `Aplicando la lógica BS: si el precio justo es $${adj.toFixed(2)} y puedes comprarlo a $${row.last.toFixed(2)}, conviene comprar. ` +
+                 exposicion;
+  } else if (opcionCara) {
+    senal      = 'NO comprar / VENDER si la tiene';
+    senalColor = '#ff6b4a';
+    fundamento = 'El precio de mercado está POR ENCIMA del valor teórico ajustado. Según el modelo, la opción está sobrevaluada: el mercado cobra más de lo que debería.';
+    detalle    = `Valor teórico BS+ML: $${adj.toFixed(2)} — Precio de mercado (Last): $${row.last.toFixed(2)}. ` +
+                 `El mercado cobra $${(row.last - adj).toFixed(2)} más que el valor teórico. ` +
+                 `Aplicando la lógica BS: si el precio justo es $${adj.toFixed(2)} pero el mercado pide $${row.last.toFixed(2)}, no conviene comprar; si ya la tiene, puede ser momento de venderla. ` +
+                 exposicion;
+  } else {
+    senal      = 'Precio justo';
+    senalColor = '#7a7f96';
+    fundamento = 'El precio de mercado coincide con el valor teórico ajustado. No hay ventaja clara para comprador ni vendedor.';
+    detalle    = `Valor teórico BS+ML: $${adj.toFixed(2)} — Precio de mercado (Last): $${row.last.toFixed(2)}. ` + exposicion;
+  }
+
+  document.getElementById('tr-senal').textContent     = senal;
+  document.getElementById('tr-senal').style.color     = senalColor;
+  document.getElementById('tr-fundamento').textContent = fundamento;
+  document.getElementById('tr-detalle').textContent   = detalle;
+  // ────────────────────────────────────────────────────────────
 
   document.getElementById('result-panel').style.display = 'block';
   document.getElementById('result-panel').scrollIntoView({behavior:'smooth', block:'nearest'});
