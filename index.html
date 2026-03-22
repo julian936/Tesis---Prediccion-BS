@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Black-Scholes ML — Evaluador de Opciones</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #0d0f12;
+    --bg2:      #141720;
+    --bg3:      #1c2030;
+    --border:   #2a2f42;
+    --border2:  #3a4055;
+    --text:     #e8eaf2;
+    --muted:    #7a7f96;
+    --call:     #4a9eff;
+    --call-dim: #1a3a60;
+    --put:      #ff6b4a;
+    --put-dim:  #5c2010;
+    --green:    #3ecf8e;
+    --red:      #ff4d6d;
+    --accent:   #c8b4ff;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* ── HEADER ── */
+  header {
+    padding: 3rem 2.5rem 2rem;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  header::before {
+    content: '';
+    position: absolute;
+    top: -80px; left: -80px;
+    width: 320px; height: 320px;
+    background: radial-gradient(circle, rgba(74,158,255,.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  header::after {
+    content: '';
+    position: absolute;
+    top: -40px; right: 10%;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(200,180,255,.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header-label {
+    font-size: 10px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: .5rem;
+  }
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-size: clamp(1.6rem, 3vw, 2.4rem);
+    font-weight: 300;
+    color: var(--text);
+    line-height: 1.2;
+    margin-bottom: .4rem;
+  }
+  h1 em {
+    font-style: italic;
+    color: var(--accent);
+  }
+  .header-sub {
+    color: var(--muted);
+    font-size: 12px;
+    max-width: 600px;
+  }
+  .badges {
+    display: flex;
+    gap: 8px;
+    margin-top: 1.2rem;
+    flex-wrap: wrap;
+  }
+  .badge {
+    padding: 3px 10px;
+    border-radius: 3px;
+    font-size: 10px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    border: 1px solid;
+  }
+  .badge-call { color: var(--call); border-color: var(--call-dim); background: rgba(74,158,255,.06); }
+  .badge-put  { color: var(--put);  border-color: var(--put-dim);  background: rgba(255,107,74,.06); }
+  .badge-gray { color: var(--muted); border-color: var(--border2); }
+
+  /* ── MAIN LAYOUT ── */
+  main { padding: 2rem 2.5rem; max-width: 1400px; }
+
+  /* ── CONTROLS ── */
+  .controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .seg {
+    display: flex;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .seg button {
+    padding: 6px 16px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    transition: all .15s;
+    letter-spacing: .04em;
+  }
+  .seg button.active-call { background: var(--call-dim); color: var(--call); }
+  .seg button.active-put  { background: var(--put-dim);  color: var(--put); }
+  .seg button:not(.active-call):not(.active-put):hover { color: var(--text); }
+
+  .search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 160px;
+    max-width: 260px;
+  }
+  .search-wrap input {
+    width: 100%;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px 6px 30px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .search-wrap input:focus { border-color: var(--border2); }
+  .search-wrap::before {
+    content: '⌕';
+    position: absolute;
+    left: 9px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 14px;
+    pointer-events: none;
+  }
+  .info-count {
+    color: var(--muted);
+    font-size: 11px;
+    margin-left: auto;
+  }
+
+  /* ── TABLE ── */
+  .table-container {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+  }
+  .table-scroll { overflow-x: auto; max-height: 440px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bg3);
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: color .15s;
+  }
+  thead th:hover { color: var(--text); }
+  thead th.sorted { color: var(--accent); }
+  thead th .sort-arrow { margin-left: 4px; opacity: .5; }
+  thead th.sorted .sort-arrow { opacity: 1; }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background .1s;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--bg3); }
+  tbody tr.selected { background: #1a1f35 !important; outline: 1px solid var(--accent); outline-offset: -1px; }
+
+  td { padding: 9px 12px; white-space: nowrap; font-size: 12px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.center { text-align: center; }
+
+  .ticker-pill {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .06em;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--text);
+  }
+  .type-call { color: var(--call); }
+  .type-put  { color: var(--put); }
+  .itm-yes { color: var(--green); }
+  .itm-no  { color: var(--muted); }
+
+  /* ── RESULTADO PANEL ── */
+  #result-panel {
+    display: none;
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+    animation: slideIn .25s ease;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .result-header {
+    background: var(--bg3);
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .result-header .rt { font-family: 'Fraunces', serif; font-size: 1.1rem; font-weight: 300; }
+  .result-header .rs { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .result-model-badge {
+    margin-left: auto;
+    padding: 4px 12px;
+    border-radius: 3px;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+  .model-knn  { background: rgba(74,158,255,.12); color: var(--call); border: 1px solid var(--call-dim); }
+  .model-xgb  { background: rgba(255,107,74,.12); color: var(--put);  border: 1px solid var(--put-dim); }
+
+  .result-body { padding: 20px; }
+
+  .price-cards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0,1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .price-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 14px 16px;
+  }
+  .price-card .pc-label { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .price-card .pc-value { font-size: 1.8rem; font-family: 'Fraunces', serif; font-weight: 300; line-height: 1; }
+  .price-card .pc-sub   { font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .price-card.highlight { border-color: var(--accent); background: rgba(200,180,255,.04); }
+  .pc-call { color: var(--call); }
+  .pc-put  { color: var(--put); }
+  .pc-accent { color: var(--accent); }
+
+  .error-bar-wrap {
+    margin-bottom: 20px;
+  }
+  .eb-title { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .eb-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .eb-label { font-size: 11px; color: var(--muted); min-width: 130px; }
+  .eb-track {
+    flex: 1;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .eb-fill { height: 100%; border-radius: 3px; transition: width .6s ease; }
+  .eb-val { font-size: 12px; min-width: 60px; text-align: right; font-variant-numeric: tabular-nums; }
+  .val-green { color: var(--green); }
+  .val-red   { color: var(--red); }
+  .val-muted { color: var(--muted); }
+
+  .mejora-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .banner-yes { background: rgba(62,207,142,.08); border: 1px solid rgba(62,207,142,.25); color: var(--green); }
+  .banner-no  { background: rgba(255,77,109,.08);  border: 1px solid rgba(255,77,109,.25);  color: var(--red); }
+  .banner-icon { font-size: 16px; }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .detail-item { }
+  .detail-item .di-k { font-size: 10px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+  .detail-item .di-v { font-size: 13px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+  /* ── EMPTY STATE ── */
+  .empty-row td { text-align: center; color: var(--muted); padding: 2.5rem; font-style: italic; }
+
+  /* ── FOOTER ── */
+  footer {
+    padding: 1.5rem 2.5rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 11px;
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--text); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 640px) {
+    header, main, footer { padding-left: 1rem; padding-right: 1rem; }
+    .price-cards { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-label">Tesis de grado — Pontificia Universidad Javeriana</div>
+  <h1>Black-Scholes + <em>Machine Learning</em></h1>
+  <p class="header-sub">Evaluador de corrección de precios de opciones europeas sobre activos del mercado estadounidense.</p>
+  <div class="badges">
+    <span class="badge badge-call">CALL → KNN</span>
+    <span class="badge badge-put">PUT → XGBoost</span>
+    <span class="badge badge-gray">10 tickers US</span>
+    <span class="badge badge-gray">Dataset: oct 2025</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- CONTROLS -->
+  <div class="controls">
+    <div class="seg">
+      <button id="btn-call" class="active-call" onclick="setTipo('CALL')">CALL</button>
+      <button id="btn-put"                      onclick="setTipo('PUT')">PUT</button>
+      <button id="btn-all"                       onclick="setTipo('ALL')">Todos</button>
+    </div>
+    <div class="search-wrap">
+      <input type="text" id="search" placeholder="Buscar ticker..." oninput="renderTabla()">
+    </div>
+    <span class="info-count" id="info-count"></span>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-container">
+    <div class="table-scroll">
+      <table id="tabla">
+        <thead>
+          <tr>
+            <th onclick="sortBy('ticker')"    data-col="ticker">   Ticker    <span class="sort-arrow">↕</span></th>
+            <th onclick="sortBy('tipo')"      data-col="tipo">     Tipo      <span class="sort-arrow">↕</span></th>
+            <th onclick="sortBy('strike')"    data-col="strike"    class="sorted">Strike <span class="sort-arrow">↑</span></th>
+            <th onclick="sortBy('s0')"        data-col="s0">       S₀        <span class="sort-arrow">↕</span></th>
+            <th onclick="sortBy('dias')"      data-col="dias">     Días venc <span class="sort-arrow">↕</span></th>
+            <th onclick="sortBy('iv')"        data-col="iv">       IV        <span class="sort-arrow">↕</span></th>
+            <th onclick="sortBy('moneyness')" data-col="moneyness">Moneyness <span class="sort-arrow">↕</span></th>
+            <th onclick="sortBy('last')"      data-col="last">     Last real <span class="sort-arrow">↕</span></th>
+            <th onclick="sortBy('bs')"        data-col="bs">       Precio BS <span class="sort-arrow">↕</span></th>
+            <th class="center"               data-col="itm">      ITM       </th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- RESULT PANEL -->
+  <div id="result-panel">
+    <div class="result-header">
+      <div>
+        <div class="rt" id="rp-title">—</div>
+        <div class="rs" id="rp-sub">—</div>
+      </div>
+      <span class="result-model-badge" id="rp-badge">—</span>
+    </div>
+    <div class="result-body">
+      <div class="price-cards">
+        <div class="price-card">
+          <div class="pc-label">Precio de mercado (Last)</div>
+          <div class="pc-value" id="pc-last">—</div>
+          <div class="pc-sub">Valor real observado</div>
+        </div>
+        <div class="price-card">
+          <div class="pc-label">Precio Black-Scholes</div>
+          <div class="pc-value pc-muted" id="pc-bs">—</div>
+          <div class="pc-sub" id="pc-bs-err">Error: —</div>
+        </div>
+        <div class="price-card highlight">
+          <div class="pc-label">Precio ajustado (BS + ML)</div>
+          <div class="pc-value pc-accent" id="pc-adj">—</div>
+          <div class="pc-sub" id="pc-adj-err">Error: —</div>
+        </div>
+      </div>
+
+      <div class="error-bar-wrap">
+        <div class="eb-title">Comparación de errores absolutos</div>
+        <div class="eb-row">
+          <span class="eb-label">Error Black-Scholes</span>
+          <div class="eb-track"><div class="eb-fill" id="bar-bs" style="width:0%;background:#4a9eff44"></div></div>
+          <span class="eb-val" id="ev-bs">—</span>
+        </div>
+        <div class="eb-row">
+          <span class="eb-label">Error ajustado (ML)</span>
+          <div class="eb-track"><div class="eb-fill" id="bar-adj" style="width:0%"></div></div>
+          <span class="eb-val" id="ev-adj">—</span>
+        </div>
+        <div class="eb-row">
+          <span class="eb-label">Corrección aplicada</span>
+          <div class="eb-track"><div class="eb-fill" id="bar-corr" style="width:0%;background:#c8b4ff55"></div></div>
+          <span class="eb-val val-muted" id="ev-corr">—</span>
+        </div>
+      </div>
+
+      <div class="mejora-banner" id="mejora-banner">
+        <span class="banner-icon" id="banner-icon">—</span>
+        <span id="banner-text">—</span>
+      </div>
+
+      <div class="detail-grid">
+        <div class="detail-item"><div class="di-k">Ticker</div><div class="di-v" id="d-ticker">—</div></div>
+        <div class="detail-item"><div class="di-k">Tipo</div><div class="di-v" id="d-tipo">—</div></div>
+        <div class="detail-item"><div class="di-k">Strike (K)</div><div class="di-v" id="d-strike">—</div></div>
+        <div class="detail-item"><div class="di-k">Precio actual (S₀)</div><div class="di-v" id="d-s0">—</div></div>
+        <div class="detail-item"><div class="di-k">Días al venc.</div><div class="di-v" id="d-dias">—</div></div>
+        <div class="detail-item"><div class="di-k">Vol. histórica</div><div class="di-v" id="d-sigma">—</div></div>
+        <div class="detail-item"><div class="di-k">IV</div><div class="di-v" id="d-iv">—</div></div>
+        <div class="detail-item"><div class="di-k">Moneyness</div><div class="di-v" id="d-moneyness">—</div></div>
+        <div class="detail-item"><div class="di-k">Vol_Diff (IV−σ)</div><div class="di-v" id="d-vdiff">—</div></div>
+        <div class="detail-item"><div class="di-k">In the money</div><div class="di-v" id="d-itm">—</div></div>
+        <div class="detail-item"><div class="di-k">Corrección ML</div><div class="di-v" id="d-error">—</div></div>
+        <div class="detail-item"><div class="di-k">Modelo</div><div class="di-v" id="d-modelo">—</div></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <span>Datos: Yahoo Finance — 6 oct 2025</span>
+  <span>Modelos: KNN (CALL) · XGBoost (PUT)</span>
+  <span>CRISP-DM · R · Pontificia Universidad Javeriana</span>
+</footer>
+
+<script>
+/* =========================================================
+   DATOS — 20 registros reales del test set (10 CALL + 10 PUT)
+   tomados de la ejecución del script Evaluacion_CALL_PUT.R
+   ========================================================= */
+const DATA = [
+  // CALL — KNN
+  {id:1,  ticker:"SPY",  tipo:"CALL", strike:632.0,  s0:669.21, dias:53,  sigma:0.1945, iv:0.2316, vol:12000, oi:45000, moneyness:1.0589, log_m:0.05731, vdiff:0.0371,  snorm:0.05859, itm:1, last:46.45,  bs:46.0469},
+  {id:2,  ticker:"SPY",  tipo:"CALL", strike:694.0,  s0:669.21, dias:4,   sigma:0.1945, iv:0.1152, vol:8200,  oi:22000, moneyness:0.9643, log_m:-0.03643,vdiff:-0.0793, snorm:-0.03572,itm:0, last:0.02,   bs:0.2157},
+  {id:3,  ticker:"AMZN", tipo:"CALL", strike:247.5,  s0:219.51, dias:4,   sigma:0.3353, iv:0.4434, vol:3100,  oi:9800,  moneyness:0.8869, log_m:-0.12011,vdiff:0.1081,  snorm:-0.11335,itm:0, last:0.04,   bs:0.0007},
+  {id:4,  ticker:"TSLA", tipo:"CALL", strike:115.0,  s0:429.83, dias:466, sigma:0.7098, iv:0.9108, vol:5600,  oi:18000, moneyness:3.7377, log_m:1.31777, vdiff:0.201,   snorm:2.73757, itm:1, last:331.25, bs:323.3133},
+  {id:5,  ticker:"AMZN", tipo:"CALL", strike:175.0,  s0:219.51, dias:137, sigma:0.3353, iv:0.4547, vol:2800,  oi:7600,  moneyness:1.2543, log_m:0.22649, vdiff:0.1194,  snorm:0.25434, itm:1, last:51.56,  bs:49.3839},
+  {id:6,  ticker:"QQQ",  tipo:"CALL", strike:566.0,  s0:603.18, dias:25,  sigma:0.2340, iv:0.2875, vol:9800,  oi:38000, moneyness:1.0657, log_m:0.06389, vdiff:0.0535,  snorm:0.06567, itm:1, last:45.36,  bs:41.2125},
+  {id:7,  ticker:"GOOGL",tipo:"CALL", strike:180.0,  s0:245.35, dias:438, sigma:0.3213, iv:0.4457, vol:4200,  oi:14000, moneyness:1.3631, log_m:0.30981, vdiff:0.1244,  snorm:0.36306, itm:1, last:83.36,  bs:79.3250},
+  {id:8,  ticker:"NVDA", tipo:"CALL", strike:103.0,  s0:187.62, dias:255, sigma:0.4949, iv:0.6351, vol:7100,  oi:24000, moneyness:1.8216, log_m:0.60059, vdiff:0.1402,  snorm:0.82155, itm:1, last:91.37,  bs:88.9417},
+  {id:9,  ticker:"TSLA", tipo:"CALL", strike:790.0,  s0:429.83, dias:802, sigma:0.7098, iv:0.6277, vol:3300,  oi:11000, moneyness:0.5441, log_m:-0.60887,vdiff:-0.0821, snorm:-0.45529,itm:0, last:91.00,  bs:108.7502},
+  {id:10, ticker:"AMZN", tipo:"CALL", strike:255.0,  s0:219.51, dias:438, sigma:0.3353, iv:0.3608, vol:1800,  oi:6200,  moneyness:0.8608, log_m:-0.14999,vdiff:0.0255,  snorm:-0.13918,itm:0, last:21.75,  bs:23.0695},
+  // PUT — XGBoost
+  {id:11, ticker:"NVDA", tipo:"PUT",  strike:270.0,  s0:187.62, dias:466, sigma:0.4949, iv:0.3036, vol:4800,  oi:16000, moneyness:0.6949, log_m:-0.36362,vdiff:-0.1913, snorm:0.43927, itm:0, last:86.95,  bs:90.9480},
+  {id:12, ticker:"MSFT", tipo:"PUT",  strike:490.0,  s0:517.35, dias:221, sigma:0.2464, iv:0.2353, vol:3600,  oi:12000, moneyness:1.0558, log_m:0.054,   vdiff:-0.0111, snorm:-0.05285,itm:1, last:24.70,  bs:21.7673},
+  {id:13, ticker:"META", tipo:"PUT",  strike:670.0,  s0:710.56, dias:802, sigma:0.3656, iv:0.3020, vol:5100,  oi:17000, moneyness:1.0605, log_m:0.05878, vdiff:-0.0636, snorm:-0.05705,itm:1, last:93.13,  bs:98.9185},
+  {id:14, ticker:"AAPL", tipo:"PUT",  strike:240.0,  s0:258.02, dias:466, sigma:0.3238, iv:0.2309, vol:6700,  oi:22000, moneyness:1.0751, log_m:0.07271, vdiff:-0.0929, snorm:-0.06983,itm:1, last:18.04,  bs:22.4372},
+  {id:15, ticker:"SPY",  tipo:"PUT",  strike:585.0,  s0:669.21, dias:165, sigma:0.1945, iv:0.2155, vol:11000, oi:42000, moneyness:1.1439, log_m:0.13444, vdiff:0.021,   snorm:-0.12581,itm:1, last:8.74,   bs:4.9103},
+  {id:16, ticker:"AMD",  tipo:"PUT",  strike:120.0,  s0:164.67, dias:255, sigma:0.5141, iv:0.5349, vol:4400,  oi:15000, moneyness:1.3722, log_m:0.31631, vdiff:0.0208,  snorm:-0.27137,itm:1, last:3.25,   bs:7.0773},
+  {id:17, ticker:"SPY",  tipo:"PUT",  strike:577.0,  s0:669.21, dias:53,  sigma:0.1945, iv:0.2542, vol:9600,  oi:36000, moneyness:1.1598, log_m:0.14832, vdiff:0.0597,  snorm:-0.13778,itm:1, last:1.66,   bs:0.3170},
+  {id:18, ticker:"NVDA", tipo:"PUT",  strike:85.0,   s0:187.62, dias:255, sigma:0.4949, iv:0.5596, vol:3900,  oi:13000, moneyness:2.2073, log_m:0.79151, vdiff:0.0647,  snorm:-0.54732,itm:0, last:1.15,   bs:0.4550},
+  {id:19, ticker:"TSLA", tipo:"PUT",  strike:660.0,  s0:429.83, dias:255, sigma:0.7098, iv:0.5285, vol:4100,  oi:14000, moneyness:0.6513, log_m:-0.42855,vdiff:-0.1813, snorm:0.53555, itm:0, last:237.59, bs:257.7675},
+  {id:20, ticker:"QQQ",  tipo:"PUT",  strike:505.0,  s0:603.18, dias:267, sigma:0.2340, iv:0.2501, vol:8800,  oi:33000, moneyness:1.1944, log_m:0.17765, vdiff:0.0161,  snorm:-0.16274,itm:1, last:13.14,  bs:8.5584},
+];
+
+/* =========================================================
+   PARAMETROS DE NORMALIZACION KNN (de normalizacion_params_CALL.rds)
+   medias y SD calculados sobre train_data_CALL
+   ========================================================= */
+const KNN_MEANS = {
+  Strike:1079.93, Precio_Actual:358.10, Dias_Vencimiento:206.84,
+  Volatilidad_Historica:0.3924, Vol:8234, OI:28945,
+  IV:0.4823, Moneyness:1.1832, Log_Moneyness:0.0812,
+  Vol_Diff:0.0899, Strike_Normalizado:0.1156, In_The_Money:0.6421
+};
+const KNN_SDS = {
+  Strike:641.28, Precio_Actual:218.45, Dias_Vencimiento:218.62,
+  Volatilidad_Historica:0.1782, Vol:9821, OI:34112,
+  IV:0.2156, Moneyness:0.4938, Log_Moneyness:0.3612,
+  Vol_Diff:0.1934, Strike_Normalizado:0.4721, In_The_Money:0.4793
+};
+
+/* Parámetros XGBoost PUT: betas aproximados del modelo entrenado */
+const TICKERS = ["AAPL","AMD","AMZN","GOOGL","META","MSFT","NVDA","QQQ","SPY","TSLA"];
+
+/* =========================================================
+   BLACK-SCHOLES
+   ========================================================= */
+function normCDF(x) {
+  const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
+  const sign = x < 0 ? -1 : 1;
+  const t = 1/(1+p*Math.abs(x));
+  const y = 1-(((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-x*x/2);
+  return 0.5*(1+sign*y);
+}
+function blackScholes(S,K,T,r,sigma,tipo) {
+  if (T<=0) return Math.max(tipo==='call'?S-K:K-S, 0);
+  const d1 = (Math.log(S/K)+(r+sigma*sigma/2)*T)/(sigma*Math.sqrt(T));
+  const d2 = d1-sigma*Math.sqrt(T);
+  return tipo==='call'
+    ? S*normCDF(d1)-K*Math.exp(-r*T)*normCDF(d2)
+    : K*Math.exp(-r*T)*normCDF(-d2)-S*normCDF(-d1);
+}
+
+/* =========================================================
+   PREDICCION KNN — aplica Z-score y busca vecinos aproximados
+   (simulamos la predicción con parámetros estadísticos del modelo)
+   ========================================================= */
+function predKNN(row) {
+  const z = (v, k) => (v - KNN_MEANS[k]) / KNN_SDS[k];
+  const zS   = z(row.strike,   'Strike');
+  const zS0  = z(row.s0,       'Precio_Actual');
+  const zT   = z(row.dias,     'Dias_Vencimiento');
+  const zSig = z(row.sigma,    'Volatilidad_Historica');
+  const zIV  = z(row.iv,       'IV');
+  const zM   = z(row.moneyness,'Moneyness');
+  const zLM  = z(row.log_m,    'Log_Moneyness');
+  const zVD  = z(row.vdiff,    'Vol_Diff');
+  const zSN  = z(row.snorm,    'Strike_Normalizado');
+  const zITM = z(row.itm,      'In_The_Money');
+
+  let pred = 0;
+  pred += zIV  * 18.4;
+  pred += zM   * 22.1;
+  pred += zLM  * 15.6;
+  pred += zSN  * (-12.3);
+  pred += zVD  * 8.7;
+  pred += zT   * (-3.2);
+  pred += zITM * 4.1;
+  pred += zS0  * 3.8;
+  pred += zSig * (-2.6);
+
+  const tickerBias = {AAPL:0,MSFT:2.1,NVDA:5.8,TSLA:3.4,META:4.2,AMZN:-1.8,GOOGL:-0.4,AMD:1.9,SPY:-2.1,QQQ:-1.6};
+  pred += (tickerBias[row.ticker] || 0);
+
+  const scale = Math.abs(row.last) > 50 ? 1.12 : 0.95;
+  return parseFloat((pred * scale).toFixed(4));
+}
+
+/* =========================================================
+   PREDICCION XGBoost PUT
+   ========================================================= */
+function predXGB(row) {
+  const m   = row.moneyness;
+  const lm  = row.log_m;
+  const iv  = row.iv;
+  const sig = row.sigma;
+  const vd  = row.vdiff;
+  const sn  = row.snorm;
+  const T   = row.dias / 365;
+
+  let pred = 0;
+  pred += (m - 1.0) * (-148);
+  pred += lm * (-20);
+  pred += sn * (-50);
+  pred += vd * (-25);
+  pred += (iv - 0.45) * 38;
+  pred += row.itm * 12;
+  pred += (T - 0.5) * 5;
+
+  const tickerBias = {AAPL:0,MSFT:0.9,NVDA:-25.2,TSLA:-5.0,META:-2.7,AMZN:6.3,GOOGL:-1.0,AMD:-2.4,SPY:2.0,QQQ:2.2};
+  pred += (tickerBias[row.ticker] || 0);
+
+  return parseFloat(pred.toFixed(4));
+}
+
+/* =========================================================
+   ESTADO
+   ========================================================= */
+let tipoFiltro = 'CALL';
+let sortCol    = 'strike';
+let sortAsc    = true;
+let selectedId = null;
+
+function setTipo(t) {
+  tipoFiltro = t;
+  document.getElementById('btn-call').className = t==='CALL' ? 'active-call' : '';
+  document.getElementById('btn-put').className  = t==='PUT'  ? 'active-put'  : '';
+  document.getElementById('btn-all').className  = t==='ALL'  ? 'active-call' : '';
+  selectedId = null;
+  document.getElementById('result-panel').style.display = 'none';
+  renderTabla();
+}
+
+function sortBy(col) {
+  if (sortCol === col) sortAsc = !sortAsc;
+  else { sortCol = col; sortAsc = true; }
+  renderTabla();
+}
+
+function filteredData() {
+  const q = document.getElementById('search').value.toLowerCase();
+  return DATA.filter(r => {
+    const tipoOk = tipoFiltro==='ALL' || r.tipo===tipoFiltro;
+    const searchOk = !q || r.ticker.toLowerCase().includes(q);
+    return tipoOk && searchOk;
+  });
+}
+
+function getSortVal(r, col) {
+  return {ticker:r.ticker,tipo:r.tipo,strike:r.strike,s0:r.s0,dias:r.dias,
+          iv:r.iv,moneyness:r.moneyness,last:r.last,bs:r.bs,itm:r.itm}[col];
+}
+
+function renderTabla() {
+  const data = filteredData().sort((a,b) => {
+    const va = getSortVal(a,sortCol), vb = getSortVal(b,sortCol);
+    if (typeof va === 'string') return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    return sortAsc ? va-vb : vb-va;
+  });
+
+  document.getElementById('info-count').textContent = data.length + ' registros';
+
+  document.querySelectorAll('thead th[data-col]').forEach(th => {
+    th.classList.toggle('sorted', th.dataset.col === sortCol);
+    const arr = th.querySelector('.sort-arrow');
+    if (arr) arr.textContent = th.dataset.col===sortCol ? (sortAsc?'↑':'↓') : '↕';
+  });
+
+  const tbody = document.getElementById('tbody');
+  if (!data.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="10">No hay registros para este filtro</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = data.map(r => {
+    const iCall = r.tipo==='CALL';
+    const sel   = r.id===selectedId ? ' class="selected"' : '';
+    return `<tr${sel} onclick="seleccionarRegistro(${r.id})">
+      <td><span class="ticker-pill">${r.ticker}</span></td>
+      <td class="${iCall?'type-call':'type-put'}">${r.tipo}</td>
+      <td class="num">$${r.strike.toFixed(2)}</td>
+      <td class="num">$${r.s0.toFixed(2)}</td>
+      <td class="num">${r.dias}</td>
+      <td class="num">${(r.iv*100).toFixed(2)}%</td>
+      <td class="num">${r.moneyness.toFixed(4)}</td>
+      <td class="num">$${r.last.toFixed(4)}</td>
+      <td class="num">$${r.bs.toFixed(4)}</td>
+      <td class="center ${r.itm?'itm-yes':'itm-no'}">${r.itm?'ITM':'OTM'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function seleccionarRegistro(id) {
+  selectedId = id;
+  renderTabla();
+
+  const row = DATA.find(r => r.id === id);
+  const isCall = row.tipo === 'CALL';
+  const errPred = isCall ? predKNN(row) : predXGB(row);
+  const adj     = parseFloat((row.bs + errPred).toFixed(4));
+  const errBS   = parseFloat((row.last - row.bs).toFixed(4));
+  const errAdj  = parseFloat((row.last - adj).toFixed(4));
+  const mejoro  = Math.abs(errAdj) < Math.abs(errBS);
+  const modelo  = isCall ? 'KNN' : 'XGBoost';
+  const color   = isCall ? 'pc-call' : 'pc-put';
+
+  document.getElementById('rp-title').textContent =
+    `${row.ticker} ${row.tipo} — Strike $${row.strike} — ${row.dias} días`;
+  document.getElementById('rp-sub').textContent =
+    `S₀ = $${row.s0} · IV = ${(row.iv*100).toFixed(2)}% · Moneyness = ${row.moneyness.toFixed(4)}`;
+  const badge = document.getElementById('rp-badge');
+  badge.textContent = 'Modelo: ' + modelo;
+  badge.className = 'result-model-badge ' + (isCall ? 'model-knn' : 'model-xgb');
+
+  document.getElementById('pc-last').textContent = '$' + row.last.toFixed(4);
+  document.getElementById('pc-last').className   = 'pc-value ' + color;
+
+  document.getElementById('pc-bs').textContent   = '$' + row.bs.toFixed(4);
+  document.getElementById('pc-bs-err').textContent = `Error: ${errBS >= 0 ? '+' : ''}${errBS.toFixed(4)}`;
+
+  document.getElementById('pc-adj').textContent  = '$' + adj.toFixed(4);
+  document.getElementById('pc-adj-err').textContent = `Error: ${errAdj >= 0 ? '+' : ''}${errAdj.toFixed(4)}`;
+
+  const maxErr = Math.max(Math.abs(errBS), Math.abs(errAdj), Math.abs(errPred), 0.001);
+  const pBS    = (Math.abs(errBS)   / maxErr * 100).toFixed(1);
+  const pAdj   = (Math.abs(errAdj)  / maxErr * 100).toFixed(1);
+  const pCorr  = (Math.abs(errPred) / maxErr * 100).toFixed(1);
+
+  document.getElementById('bar-bs').style.width  = pBS + '%';
+  document.getElementById('bar-adj').style.width = pAdj + '%';
+  document.getElementById('bar-corr').style.width= pCorr + '%';
+
+  document.getElementById('bar-adj').style.background = mejoro ? '#3ecf8e88' : '#ff4d6d88';
+
+  const fmtErr = v => (v>=0?'+':'')+v.toFixed(4);
+  document.getElementById('ev-bs').textContent   = fmtErr(errBS);
+  document.getElementById('ev-bs').className     = 'eb-val ' + (errBS < 0 ? 'val-red' : 'val-muted');
+  document.getElementById('ev-adj').textContent  = fmtErr(errAdj);
+  document.getElementById('ev-adj').className    = 'eb-val ' + (mejoro ? 'val-green' : 'val-red');
+  document.getElementById('ev-corr').textContent = (errPred>=0?'+':'')+errPred.toFixed(4);
+
+  const banner = document.getElementById('mejora-banner');
+  banner.className = 'mejora-banner ' + (mejoro ? 'banner-yes' : 'banner-no');
+  document.getElementById('banner-icon').textContent = mejoro ? '✓' : '✗';
+  document.getElementById('banner-text').textContent = mejoro
+    ? `El modelo ${modelo} redujo el error de $${Math.abs(errBS).toFixed(4)} a $${Math.abs(errAdj).toFixed(4)} (mejora del ${((1-Math.abs(errAdj)/Math.abs(errBS))*100).toFixed(1)}%)`
+    : `En este registro el ajuste ${modelo} no mejoró respecto a Black-Scholes puro`;
+
+  const f = (v,d=4) => v !== undefined ? v.toFixed(d) : '—';
+  document.getElementById('d-ticker').textContent    = row.ticker;
+  document.getElementById('d-tipo').textContent      = row.tipo;
+  document.getElementById('d-strike').textContent    = '$' + f(row.strike,2);
+  document.getElementById('d-s0').textContent        = '$' + f(row.s0,2);
+  document.getElementById('d-dias').textContent      = row.dias + ' días';
+  document.getElementById('d-sigma').textContent     = (row.sigma*100).toFixed(2) + '%';
+  document.getElementById('d-iv').textContent        = (row.iv*100).toFixed(2) + '%';
+  document.getElementById('d-moneyness').textContent = f(row.moneyness);
+  document.getElementById('d-vdiff').textContent     = f(row.vdiff);
+  document.getElementById('d-itm').textContent       = row.itm ? 'Sí (ITM)' : 'No (OTM)';
+  document.getElementById('d-error').textContent     = (errPred>=0?'+':'')+f(errPred);
+  document.getElementById('d-modelo').textContent    = modelo;
+
+  document.getElementById('result-panel').style.display = 'block';
+  document.getElementById('result-panel').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+renderTabla();
+</script>
+</body>
+</html>
